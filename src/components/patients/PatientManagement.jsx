@@ -45,6 +45,9 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import SearchBar from '../common/SearchBar';
+import SearchService from '../../services/SearchService';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -56,12 +59,14 @@ const TabPanel = (props) => {
 };
 
 const PatientManagement = () => {
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tabValue, setTabValue] = useState(0);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogType, setDialogType] = useState('patient'); // 'patient' or 'appointment'
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
@@ -123,11 +128,76 @@ const PatientManagement = () => {
   });
 
   useEffect(() => {
-    // Simulate initial data loading
-    setTimeout(() => {
-      setLoading(false);
-    }, 1500);
+    loadData();
   }, []);
+
+  useEffect(() => {
+    // Update search when URL changes
+    const searchFromUrl = searchParams.get('search');
+    const filtersFromUrl = {};
+    SearchService.getFilters('patients').forEach(filter => {
+      const value = searchParams.get(filter);
+      if (value) filtersFromUrl[filter] = value;
+    });
+
+    if (searchFromUrl !== searchTerm) {
+      setSearchTerm(searchFromUrl || '');
+      setPage(0);
+    }
+  }, [searchParams]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await SearchService.searchCategory('patients', searchTerm);
+      setPatients(data);
+    } catch (error) {
+      console.error('Failed to load patients:', error);
+      showSnackbar('Failed to load patients', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (term, filters) => {
+    setSearchTerm(term);
+    setPage(0);
+
+    // Update URL
+    if (term) {
+      searchParams.set('search', term);
+    } else {
+      searchParams.delete('search');
+    }
+
+    // Update filter params in URL
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      } else {
+        searchParams.delete(key);
+      }
+    });
+
+    setSearchParams(searchParams);
+
+    // Perform search
+    try {
+      const results = await SearchService.searchCategory('patients', term, filters);
+      setPatients(results);
+    } catch (error) {
+      console.error('Search failed:', error);
+      showSnackbar('Search failed', 'error');
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadData().finally(() => {
+      setRefreshing(false);
+      showSnackbar('Data refreshed successfully', 'success');
+    });
+  };
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -151,14 +221,6 @@ const PatientManagement = () => {
     }));
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-      showSnackbar('Data refreshed successfully', 'success');
-    }, 1000);
-  };
-
   const showSnackbar = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
   };
@@ -173,11 +235,6 @@ const PatientManagement = () => {
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const handleSearch = (event) => {
-    setSearchTerm(event.target.value);
     setPage(0);
   };
 
@@ -214,12 +271,16 @@ const PatientManagement = () => {
   }
 
   const filterData = (data) => {
+    if (!searchTerm) return data;
+    
     return data.filter((item) =>
-      Object.values(item).some(
-        (value) =>
-          value &&
-          value.toString().toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      Object.entries(item).some(([key, value]) => {
+        // Skip filtering on certain fields
+        if (['id', 'createdAt', 'updatedAt'].includes(key)) return false;
+        
+        return value && 
+               value.toString().toLowerCase().includes(searchTerm.toLowerCase());
+      })
     );
   };
 
@@ -258,35 +319,15 @@ const PatientManagement = () => {
                 </Tabs>
               </Box>
 
-              {/* Search and Actions Bar */}
-              <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-                <TextField
-                  size="small"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={handleSearch}
-                  InputProps={{
-                    startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-                  }}
-                  sx={{ flexGrow: 1 }}
+              {/* Search Bar */}
+              <Box sx={{ p: 2 }}>
+                <SearchBar
+                  category="patients"
+                  onSearch={handleSearch}
+                  onRefresh={handleRefresh}
+                  placeholder="Search patients..."
+                  initialSearchTerm={searchTerm}
                 />
-                <Tooltip title="Filter">
-                  <IconButton>
-                    <FilterIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Refresh">
-                  <IconButton onClick={handleRefresh} disabled={refreshing}>
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-                <Button
-                  variant="contained"
-                  startIcon={tabValue === 1 ? <EventIcon /> : <AddIcon />}
-                  onClick={() => handleOpenDialog(tabValue === 1 ? 'appointment' : 'patient')}
-                >
-                  {tabValue === 1 ? 'Schedule Appointment' : 'Add Patient'}
-                </Button>
               </Box>
 
               {/* Tabs Content */}

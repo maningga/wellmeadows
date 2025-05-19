@@ -125,7 +125,7 @@ const Login = () => {
                   mb: 3,
                 }}
               >
-                Hospital Management System
+                Well Meadows Hospital
               </Typography>
               <Typography
                 component="h2"

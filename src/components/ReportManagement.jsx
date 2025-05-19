@@ -31,7 +31,7 @@ import {
   GetApp,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import DatabaseService from '../config/database';
+import { db } from '../config/database';
 
 const ReportManagement = () => {
   const [loading, setLoading] = useState(false);
@@ -115,8 +115,8 @@ const ReportManagement = () => {
   const generateReport = async (type) => {
     setLoading(true);
     try {
-      const response = await DatabaseService.reports[`get${type.charAt(0).toUpperCase() + type.slice(1)}Stats`]();
-      setReportData(response.data);
+      const response = await db.query(`/reports/${type}`);
+      setReportData(response);
       setCurrentReport(reports.find(r => r.type === type));
       setOpenDialog(true);
     } catch (error) {
